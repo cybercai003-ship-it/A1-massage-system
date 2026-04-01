@@ -29,6 +29,33 @@ export default function BookingPage() {
 
     const savedBookings = JSON.parse(localStorage.getItem("bookings") || "[]");
 
+    const startTime = new Date(form.time).getTime();
+    const duration = parseInt(form.duration, 10);
+    const endTime = startTime + duration * 60 * 1000;
+
+    // 只检查技师冲突，房间先忽略
+    for (let item of savedBookings) {
+      if (!form.therapist || !item.therapist) continue;
+
+      const sameTherapist =
+        item.therapist.trim().toLowerCase() ===
+        form.therapist.trim().toLowerCase();
+
+      if (!sameTherapist) continue;
+
+      const existingStart = new Date(item.time).getTime();
+      const existingEnd =
+        existingStart + parseInt(item.duration, 10) * 60 * 1000;
+
+      const isOverlap =
+        startTime < existingEnd && endTime > existingStart;
+
+      if (isOverlap) {
+        alert("❌ 该技师这个时间已经有预约，不能重复");
+        return;
+      }
+    }
+
     const newBooking = {
       id: Date.now(),
       time: form.time,
