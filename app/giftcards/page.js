@@ -90,7 +90,9 @@ export default function GiftCardsPage() {
 
     const saved = JSON.parse(localStorage.getItem("giftcards") || "[]");
     const index = saved.findIndex(
-      (item) => item.cardNo.toLowerCase() === useForm.cardNo.trim().toLowerCase()
+      (item) =>
+        (item.cardNo || "").trim().toLowerCase() ===
+        useForm.cardNo.trim().toLowerCase()
     );
 
     if (index === -1) {
@@ -105,29 +107,31 @@ export default function GiftCardsPage() {
       return;
     }
 
-    if (card.remainingSessions <= 0) {
+    if (Number(card.remainingSessions || 0) <= 0) {
       alert("该礼品卡次数不足，不能使用");
       return;
     }
 
     const updatedCard = {
       ...card,
-      usedSessions: card.usedSessions + 1,
-      remainingSessions: card.remainingSessions - 1,
-      status: card.remainingSessions - 1 <= 0 ? "used_up" : "active",
+      usedSessions: Number(card.usedSessions || 0) + 1,
+      remainingSessions: Number(card.remainingSessions || 0) - 1,
+      status:
+        Number(card.remainingSessions || 0) - 1 <= 0 ? "used_up" : "active",
       usageHistory: [
         ...(card.usageHistory || []),
         {
           time: new Date().toLocaleString(),
           therapist: useForm.therapist,
           note: useForm.note,
+          source: "giftcards",
         },
       ],
     };
 
     saved[index] = updatedCard;
     localStorage.setItem("giftcards", JSON.stringify(saved));
-    setGiftCards(saved);
+    setGiftCards([...saved]);
 
     alert("礼品卡核销成功 ✅");
 
@@ -172,7 +176,11 @@ export default function GiftCardsPage() {
 
       <div style={{ marginBottom: 12 }}>
         <label>客户姓名（可不填）：</label>
-        <input name="customerName" value={form.customerName} onChange={handleChange} />
+        <input
+          name="customerName"
+          value={form.customerName}
+          onChange={handleChange}
+        />
       </div>
 
       <div style={{ marginBottom: 12 }}>
@@ -182,7 +190,12 @@ export default function GiftCardsPage() {
 
       <div style={{ marginBottom: 12 }}>
         <label>销售金额：</label>
-        <input name="salePrice" type="number" value={form.salePrice} onChange={handleChange} />
+        <input
+          name="salePrice"
+          type="number"
+          value={form.salePrice}
+          onChange={handleChange}
+        />
       </div>
 
       <div style={{ marginBottom: 12 }}>
@@ -198,17 +211,29 @@ export default function GiftCardsPage() {
 
       <div style={{ marginBottom: 12 }}>
         <label>礼品卡号：</label>
-        <input name="cardNo" value={useForm.cardNo} onChange={handleUseChange} />
+        <input
+          name="cardNo"
+          value={useForm.cardNo}
+          onChange={handleUseChange}
+        />
       </div>
 
       <div style={{ marginBottom: 12 }}>
         <label>技师：</label>
-        <input name="therapist" value={useForm.therapist} onChange={handleUseChange} />
+        <input
+          name="therapist"
+          value={useForm.therapist}
+          onChange={handleUseChange}
+        />
       </div>
 
       <div style={{ marginBottom: 12 }}>
         <label>备注：</label>
-        <input name="note" value={useForm.note} onChange={handleUseChange} />
+        <input
+          name="note"
+          value={useForm.note}
+          onChange={handleUseChange}
+        />
       </div>
 
       <button onClick={handleUseCard}>核销1次</button>
@@ -221,7 +246,11 @@ export default function GiftCardsPage() {
       {giftCards.length === 0 ? (
         <p>暂无礼品卡</p>
       ) : (
-        <table border="1" cellPadding="8" style={{ borderCollapse: "collapse", width: "100%" }}>
+        <table
+          border="1"
+          cellPadding="8"
+          style={{ borderCollapse: "collapse", width: "100%" }}
+        >
           <thead>
             <tr>
               <th>卡号</th>
@@ -251,7 +280,10 @@ export default function GiftCardsPage() {
                 <td>{item.status}</td>
                 <td>{item.createdAt}</td>
                 <td>
-                  <button onClick={() => handleVoid(item.id)} style={{ marginRight: 8 }}>
+                  <button
+                    onClick={() => handleVoid(item.id)}
+                    style={{ marginRight: 8 }}
+                  >
                     作废
                   </button>
                   <button onClick={() => handleDelete(item.id)}>删除</button>
