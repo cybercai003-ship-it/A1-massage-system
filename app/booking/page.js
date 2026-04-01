@@ -15,7 +15,7 @@ export default function BookingPage() {
   };
 
   const handleSubmit = () => {
-    alert("预约已保存（下一步我们会接入数据库）");
+    alert("预约已保存");
     console.log(form);
   };
 
@@ -23,12 +23,12 @@ export default function BookingPage() {
     <div style={{ padding: 40 }}>
       <h1>预约系统</h1>
 
-      <div style={{ marginBottom: 10 }}>
+      <div>
         时间：
         <input type="datetime-local" name="time" onChange={handleChange} />
       </div>
 
-      <div style={{ marginBottom: 10 }}>
+      <div>
         时长：
         <select name="duration" onChange={handleChange}>
           <option value="30">30分钟</option>
@@ -39,7 +39,7 @@ export default function BookingPage() {
         </select>
       </div>
 
-      <div style={{ marginBottom: 10 }}>
+      <div>
         房间：
         <select name="room" onChange={handleChange}>
           <option value="single">单人房</option>
@@ -47,15 +47,17 @@ export default function BookingPage() {
         </select>
       </div>
 
-      <div style={{ marginBottom: 10 }}>
+      <div>
         技师：
         <input name="therapist" onChange={handleChange} />
       </div>
 
-      <div style={{ marginBottom: 10 }}>
+      <div>
         备注：
         <input name="note" onChange={handleChange} />
       </div>
+
+      <br />
 
       <button onClick={handleSubmit}>保存预约</button>
     </div>
