@@ -1,6 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 
+function normalizeName(name) {
+  return (name || "").trim().toLowerCase();
+}
+
 export default function BookingPage() {
   const [form, setForm] = useState({
     time: "",
@@ -27,6 +31,11 @@ export default function BookingPage() {
       return;
     }
 
+    if (!form.therapist.trim()) {
+      alert("请输入技师姓名");
+      return;
+    }
+
     const savedBookings = JSON.parse(localStorage.getItem("bookings") || "[]");
 
     const startTime = new Date(form.time).getTime();
@@ -38,8 +47,7 @@ export default function BookingPage() {
       if (!form.therapist || !item.therapist) continue;
 
       const sameTherapist =
-        item.therapist.trim().toLowerCase() ===
-        form.therapist.trim().toLowerCase();
+        normalizeName(item.therapist) === normalizeName(form.therapist);
 
       if (!sameTherapist) continue;
 
@@ -61,7 +69,7 @@ export default function BookingPage() {
       time: form.time,
       duration: form.duration,
       room: form.room,
-      therapist: form.therapist,
+      therapist: normalizeName(form.therapist),
       note: form.note,
     };
 
