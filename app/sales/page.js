@@ -18,6 +18,10 @@ export default function SalesPage() {
     essentialOil: false,
     price: "",
     therapist: "",
+    paymentMethod: "POS",
+    giftCardNo: "",
+    isMember: false,
+    memberPhone: "",
     note: "",
   });
 
@@ -37,17 +41,108 @@ export default function SalesPage() {
   }
 
   function handleSubmit() {
-    if (!form.price) {
-      alert("请输入金额");
-      return;
-    }
-
     if (!form.therapist.trim()) {
       alert("请输入技师姓名");
       return;
     }
 
+    if (form.paymentMethod !== "Gift Card" && !form.price) {
+      alert("请输入金额");
+      return;
+    }
+
+    if (form.isMember && !form.memberPhone.trim()) {
+      alert("会员单请输入会员手机号");
+      return;
+    }
+
     const savedSales = JSON.parse(localStorage.getItem("sales") || "[]");
+    let savedMembers = JSON.parse(localStorage.getItem("members") || "[]");
+    let savedGiftCards = JSON.parse(localStorage.getItem("giftcards") || "[]");
+
+    let memberId = "";
+    let memberName = "";
+    let memberPhone = "";
+
+    if (form.isMember) {
+      const memberIndex = savedMembers.findIndex(
+        (item) => (item.phone || "").trim() === form.memberPhone.trim()
+      );
+
+      if (memberIndex === -1) {
+        alert("未找到该会员手机号，请先去会员系统创建会员");
+        return;
+      }
+
+      const member = savedMembers[memberIndex];
+
+      memberId = member.id;
+      memberName = member.name || "";
+      memberPhone = member.phone || "";
+
+      savedMembers[memberIndex] = {
+        ...member,
+        visitCount: Number(member.visitCount || 0) + 1,
+      };
+
+      localStorage.setItem("members", JSON.stringify(savedMembers));
+    }
+
+    let giftCardId = "";
+    let finalPrice = form.paymentMethod === "Gift Card" ? 0 : parseFloat(form.price);
+
+    if (form.paymentMethod === "Gift Card") {
+      if (!form.giftCardNo.trim()) {
+        alert("礼品卡支付时请输入礼品卡号");
+        return;
+      }
+
+      const giftCardIndex = savedGiftCards.findIndex(
+        (item) =>
+          (item.cardNo || "").trim().toLowerCase() ===
+          form.giftCardNo.trim().toLowerCase()
+      );
+
+      if (giftCardIndex === -1) {
+        alert("未找到该礼品卡");
+        return;
+      }
+
+      const card = savedGiftCards[giftCardIndex];
+
+      if (card.status === "void") {
+        alert("该礼品卡已作废，不能使用");
+        return;
+      }
+
+      if (card.status === "used_up" || Number(card.remainingSessions || 0) <= 0) {
+        alert("该礼品卡次数不足，不能使用");
+        return;
+      }
+
+      const updatedCard = {
+        ...card,
+        usedSessions: Number(card.usedSessions || 0) + 1,
+        remainingSessions: Number(card.remainingSessions || 0) - 1,
+        status:
+          Number(card.remainingSessions || 0) - 1 <= 0 ? "used_up" : "active",
+        usageHistory: [
+          ...(card.usageHistory || []),
+          {
+            time: new Date().toLocaleString(),
+            therapist: form.therapist,
+            note: form.note || "销售页面自动核销",
+            source: "sales",
+          },
+        ],
+      };
+
+      savedGiftCards[giftCardIndex] = updatedCard;
+      localStorage.setItem("giftcards", JSON.stringify(savedGiftCards));
+
+      giftCardId = updatedCard.cardNo;
+      finalPrice = 0;
+    }
 
     const newSale = {
       id: Date.now(),
@@ -55,8 +150,14 @@ export default function SalesPage() {
       service: form.service,
       hotStone: form.hotStone,
       essentialOil: form.essentialOil,
-      price: parseFloat(form.price),
+      price: finalPrice,
       therapist: normalizeName(form.therapist),
+      paymentMethod: form.paymentMethod,
+      giftCardNo: form.paymentMethod === "Gift Card" ? form.giftCardNo.trim() : "",
+      isMember: form.isMember,
+      memberId,
+      memberName,
+      memberPhone,
       note: form.note,
       timeText: new Date().toLocaleString(),
     };
@@ -74,6 +175,10 @@ export default function SalesPage() {
       essentialOil: false,
       price: "",
       therapist: "",
+      paymentMethod: "POS",
+      giftCardNo: "",
+      isMember: false,
+      memberPhone: "",
       note: "",
     });
   }
@@ -138,7 +243,11 @@ export default function SalesPage() {
           name="price"
           value={form.price}
           onChange={handleChange}
+          disabled={form.paymentMethod === "Gift Card"}
         />
+        {form.paymentMethod === "Gift Card" && (
+          <span style={{ marginLeft: 10 }}>礼品卡支付自动为 0</span>
+        )}
       </div>
 
       <div style={{ marginBottom: 12 }}>
@@ -150,6 +259,55 @@ export default function SalesPage() {
           onChange={handleChange}
         />
       </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label>支付方式：</label>
+        <select
+          name="paymentMethod"
+          value={form.paymentMethod}
+          onChange={handleChange}
+        >
+          <option value="POS">POS</option>
+          <option value="Cash">现金</option>
+          <option value="Gift Card">礼品卡</option>
+        </select>
+      </div>
+
+      {form.paymentMethod === "Gift Card" && (
+        <div style={{ marginBottom: 12 }}>
+          <label>礼品卡号：</label>
+          <input
+            type="text"
+            name="giftCardNo"
+            value={form.giftCardNo}
+            onChange={handleChange}
+          />
+        </div>
+      )}
+
+      <div style={{ marginBottom: 12 }}>
+        <label>
+          <input
+            type="checkbox"
+            name="isMember"
+            checked={form.isMember}
+            onChange={handleChange}
+          />
+          是否会员
+        </label>
+      </div>
+
+      {form.isMember && (
+        <div style={{ marginBottom: 12 }}>
+          <label>会员手机号：</label>
+          <input
+            type="text"
+            name="memberPhone"
+            value={form.memberPhone}
+            onChange={handleChange}
+          />
+        </div>
+      )}
 
       <div style={{ marginBottom: 12 }}>
         <label>备注：</label>
@@ -180,6 +338,10 @@ export default function SalesPage() {
               <th>精油</th>
               <th>金额</th>
               <th>技师</th>
+              <th>支付方式</th>
+              <th>礼品卡号</th>
+              <th>会员</th>
+              <th>会员手机号</th>
               <th>备注</th>
               <th>操作</th>
             </tr>
@@ -193,6 +355,10 @@ export default function SalesPage() {
                 <td>{item.essentialOil ? "是" : "否"}</td>
                 <td>${Number(item.price).toFixed(2)}</td>
                 <td>{formatDisplayName(item.therapist) || "-"}</td>
+                <td>{item.paymentMethod || "-"}</td>
+                <td>{item.giftCardNo || "-"}</td>
+                <td>{item.isMember ? "是" : "否"}</td>
+                <td>{item.memberPhone || "-"}</td>
                 <td>{item.note || "-"}</td>
                 <td>
                   <button onClick={() => handleDelete(item.id)}>删除</button>
