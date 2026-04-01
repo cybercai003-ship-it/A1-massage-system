@@ -20,6 +20,12 @@ export default function Home() {
           <button>会员系统</button>
         </a>
       </div>
+
+      <div style={{ marginTop: 20 }}>
+        <a href="/giftcards">
+          <button>礼品卡系统</button>
+        </a>
+      </div>
     </div>
   );
 }
