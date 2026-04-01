@@ -25,18 +25,28 @@ export default function MembersPage() {
   }
 
   function handleSubmit() {
-    if (!form.phone) {
+    if (!form.phone.trim()) {
       alert("请输入手机号");
       return;
     }
 
     const saved = JSON.parse(localStorage.getItem("members") || "[]");
 
+    const exists = saved.some(
+      (item) => (item.phone || "").trim() === form.phone.trim()
+    );
+
+    if (exists) {
+      alert("该手机号已经是会员");
+      return;
+    }
+
     const newMember = {
       id: generateMemberId(),
       name: form.name,
       phone: form.phone,
       note: form.note,
+      visitCount: 0,
       createdAt: new Date().toLocaleString(),
     };
 
@@ -106,6 +116,7 @@ export default function MembersPage() {
               <th>会员编号</th>
               <th>姓名</th>
               <th>手机号</th>
+              <th>来过几次</th>
               <th>备注</th>
               <th>创建时间</th>
               <th>操作</th>
@@ -117,6 +128,7 @@ export default function MembersPage() {
                 <td>{item.id}</td>
                 <td>{item.name || "-"}</td>
                 <td>{item.phone}</td>
+                <td>{Number(item.visitCount || 0)}</td>
                 <td>{item.note || "-"}</td>
                 <td>{item.createdAt}</td>
                 <td>
