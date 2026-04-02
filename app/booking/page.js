@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 function normalizeName(name) {
   return (name || "").trim().toLowerCase();
@@ -29,20 +29,31 @@ function formatBookingTime(value) {
   return date.toLocaleString();
 }
 
-function shouldAutoDelete(item) {
-  if (!item) return false;
-  if (item.status !== "completed" && item.status !== "cancelled") return false;
+function isSameOrAfterToday(value) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
 
-  const baseTime = item.statusUpdatedAt || item.createdAt || item.time;
-  if (!baseTime) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  const targetTime = new Date(baseTime).getTime();
-  if (Number.isNaN(targetTime)) return false;
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
 
-  const now = Date.now();
-  const twoDaysMs = 2 * 24 * 60 * 60 * 1000;
+  return target.getTime() >= today.getTime();
+}
 
-  return now - targetTime >= twoDaysMs;
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0 Sunday, 1 Monday
+  const diff = day === 0 ? -6 : 1 - day; // make Monday start
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getWeekLabels() {
+  return ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 }
 
 export default function BookingPage() {
@@ -62,7 +73,10 @@ export default function BookingPage() {
   useEffect(() => {
     const savedBookings = JSON.parse(localStorage.getItem("bookings") || "[]");
 
-    const cleanedBookings = savedBookings.filter((item) => !shouldAutoDelete(item));
+    // 自动清掉今天之前的预约
+    const cleanedBookings = savedBookings.filter((item) =>
+      isSameOrAfterToday(item.time)
+    );
 
     if (cleanedBookings.length !== savedBookings.length) {
       localStorage.setItem("bookings", JSON.stringify(cleanedBookings));
@@ -154,9 +168,6 @@ export default function BookingPage() {
       status: editingId
         ? existingBooking?.status || "booked"
         : "booked",
-      statusUpdatedAt: editingId
-        ? existingBooking?.statusUpdatedAt || new Date().toISOString()
-        : new Date().toISOString(),
       createdAt: editingId
         ? existingBooking?.createdAt || new Date().toISOString()
         : new Date().toISOString(),
@@ -174,8 +185,13 @@ export default function BookingPage() {
       alert("预约已保存 ✅");
     }
 
-    localStorage.setItem("bookings", JSON.stringify(updatedBookings));
-    setBookings(updatedBookings);
+    // 再次清理今天之前的数据
+    const finalBookings = updatedBookings.filter((item) =>
+      isSameOrAfterToday(item.time)
+    );
+
+    localStorage.setItem("bookings", JSON.stringify(finalBookings));
+    setBookings(finalBookings);
     resetForm();
   }
 
@@ -212,14 +228,67 @@ export default function BookingPage() {
         ? {
             ...item,
             status: newStatus,
-            statusUpdatedAt: new Date().toISOString(),
           }
         : item
     );
-
     localStorage.setItem("bookings", JSON.stringify(updatedBookings));
     setBookings(updatedBookings);
   }
+
+  const visibleBookings = useMemo(() => {
+    return bookings
+      .filter((item) => isSameOrAfterToday(item.time))
+      .sort((a, b) => new Date(a.time) - new Date(b.time));
+  }, [bookings]);
+
+  const weeklyStats = useMemo(() => {
+    const labels = getWeekLabels();
+    const counts = [0, 0, 0, 0, 0, 0, 0];
+
+    const now = new Date();
+    const weekStart = getWeekStart(now);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+
+    visibleBookings.forEach((item) => {
+      if (item.status === "cancelled") return;
+
+      const date = new Date(item.time);
+      if (Number.isNaN(date.getTime())) return;
+
+      if (date >= weekStart && date < weekEnd) {
+        const day = date.getDay(); // 0 Sunday
+        const index = day === 0 ? 6 : day - 1; // Monday=0
+        counts[index] += 1;
+      }
+    });
+
+    return labels.map((label, index) => ({
+      label,
+      count: counts[index],
+    }));
+  }, [visibleBookings]);
+
+  const monthlyStats = useMemo(() => {
+    const counts = Array(12).fill(0);
+    const currentYear = new Date().getFullYear();
+
+    visibleBookings.forEach((item) => {
+      if (item.status === "cancelled") return;
+
+      const date = new Date(item.time);
+      if (Number.isNaN(date.getTime())) return;
+
+      if (date.getFullYear() === currentYear) {
+        counts[date.getMonth()] += 1;
+      }
+    });
+
+    return counts.map((count, index) => ({
+      label: `${index + 1}月`,
+      count,
+    }));
+  }, [visibleBookings]);
 
   return (
     <div style={{ padding: 40, fontFamily: "Arial" }}>
@@ -323,9 +392,9 @@ export default function BookingPage() {
 
       <hr style={{ margin: "30px 0" }} />
 
-      <h2>已保存预约</h2>
+      <h2>已保存预约（仅显示今日及以后）</h2>
 
-      {bookings.length === 0 ? (
+      {visibleBookings.length === 0 ? (
         <p>暂无预约</p>
       ) : (
         <table border="1" cellPadding="8" style={{ borderCollapse: "collapse", width: "100%" }}>
@@ -343,7 +412,7 @@ export default function BookingPage() {
             </tr>
           </thead>
           <tbody>
-            {bookings.map((item) => (
+            {visibleBookings.map((item) => (
               <tr key={item.id}>
                 <td>{formatBookingTime(item.time)}</td>
                 <td>{item.duration}分钟</td>
@@ -405,6 +474,46 @@ export default function BookingPage() {
           </tbody>
         </table>
       )}
+
+      <hr style={{ margin: "30px 0" }} />
+
+      <h2>本周预约统计（周一到周日）</h2>
+      <table border="1" cellPadding="8" style={{ borderCollapse: "collapse", width: "100%" }}>
+        <thead>
+          <tr>
+            {weeklyStats.map((item) => (
+              <th key={item.label}>{item.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            {weeklyStats.map((item) => (
+              <td key={item.label}>{item.count}</td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+
+      <hr style={{ margin: "30px 0" }} />
+
+      <h2>本年每月预约统计</h2>
+      <table border="1" cellPadding="8" style={{ borderCollapse: "collapse", width: "100%" }}>
+        <thead>
+          <tr>
+            {monthlyStats.map((item) => (
+              <th key={item.label}>{item.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            {monthlyStats.map((item) => (
+              <td key={item.label}>{item.count}</td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
 
       <div style={{ marginTop: 20 }}>
         <a href="/">返回首页</a>
