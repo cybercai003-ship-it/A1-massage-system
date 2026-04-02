@@ -15,7 +15,6 @@ function formatDisplayName(name) {
     .join(" ");
 }
 
-// 支持英文逗号、中文逗号、/、&、+、顿号
 function parseTherapists(text) {
   return (text || "")
     .split(/[,，/&+、]+/)
@@ -28,6 +27,22 @@ function formatBookingTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
+}
+
+function shouldAutoDelete(item) {
+  if (!item) return false;
+  if (item.status !== "completed" && item.status !== "cancelled") return false;
+
+  const baseTime = item.statusUpdatedAt || item.createdAt || item.time;
+  if (!baseTime) return false;
+
+  const targetTime = new Date(baseTime).getTime();
+  if (Number.isNaN(targetTime)) return false;
+
+  const now = Date.now();
+  const twoDaysMs = 2 * 24 * 60 * 60 * 1000;
+
+  return now - targetTime >= twoDaysMs;
 }
 
 export default function BookingPage() {
@@ -46,7 +61,14 @@ export default function BookingPage() {
 
   useEffect(() => {
     const savedBookings = JSON.parse(localStorage.getItem("bookings") || "[]");
-    setBookings(savedBookings);
+
+    const cleanedBookings = savedBookings.filter((item) => !shouldAutoDelete(item));
+
+    if (cleanedBookings.length !== savedBookings.length) {
+      localStorage.setItem("bookings", JSON.stringify(cleanedBookings));
+    }
+
+    setBookings(cleanedBookings);
   }, []);
 
   function handleChange(e) {
@@ -94,7 +116,6 @@ export default function BookingPage() {
     const duration = parseInt(form.duration, 10);
     const endTime = startTime + duration * 60 * 1000;
 
-    // 检查每一个技师是否冲突
     for (let item of savedBookings) {
       if (editingId && item.id === editingId) continue;
       if (item.status === "cancelled") continue;
@@ -119,6 +140,8 @@ export default function BookingPage() {
       }
     }
 
+    const existingBooking = savedBookings.find((item) => item.id === editingId);
+
     const bookingData = {
       id: editingId || Date.now(),
       time: form.time,
@@ -129,12 +152,14 @@ export default function BookingPage() {
       isMember: form.isMember,
       note: form.note,
       status: editingId
-        ? (savedBookings.find((item) => item.id === editingId)?.status || "booked")
+        ? existingBooking?.status || "booked"
         : "booked",
+      statusUpdatedAt: editingId
+        ? existingBooking?.statusUpdatedAt || new Date().toISOString()
+        : new Date().toISOString(),
       createdAt: editingId
-        ? (savedBookings.find((item) => item.id === editingId)?.createdAt ||
-          new Date().toLocaleString())
-        : new Date().toLocaleString(),
+        ? existingBooking?.createdAt || new Date().toISOString()
+        : new Date().toISOString(),
     };
 
     let updatedBookings = [];
@@ -183,8 +208,15 @@ export default function BookingPage() {
 
   function handleStatusChange(id, newStatus) {
     const updatedBookings = bookings.map((item) =>
-      item.id === id ? { ...item, status: newStatus } : item
+      item.id === id
+        ? {
+            ...item,
+            status: newStatus,
+            statusUpdatedAt: new Date().toISOString(),
+          }
+        : item
     );
+
     localStorage.setItem("bookings", JSON.stringify(updatedBookings));
     setBookings(updatedBookings);
   }
