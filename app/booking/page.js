@@ -1,186 +1,308 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-function normalizeName(name) {
-  return (name || "").trim().toLowerCase();
+function generateGiftCardNo() {
+  const timestamp = Date.now().toString().slice(-6);
+  return "GC" + timestamp;
 }
 
-export default function BookingPage() {
+export default function GiftCardsPage() {
   const [form, setForm] = useState({
-    time: "",
-    duration: "30",
-    room: "single",
+    planType: "BUY6GET1",
+    customerName: "",
+    phone: "",
+    salePrice: "",
+    paymentMethod: "POS",
+    note: "",
+  });
+
+  const [useForm, setUseForm] = useState({
+    cardNo: "",
     therapist: "",
     note: "",
   });
 
-  const [bookings, setBookings] = useState([]);
+  const [giftCards, setGiftCards] = useState([]);
 
   useEffect(() => {
-    const savedBookings = JSON.parse(localStorage.getItem("bookings") || "[]");
-    setBookings(savedBookings);
+    const saved = JSON.parse(localStorage.getItem("giftcards") || "[]");
+    setGiftCards(saved);
   }, []);
 
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
   }
 
-  function handleSubmit() {
-    if (!form.time) {
-      alert("请选择时间");
+  function handleUseChange(e) {
+    setUseForm({ ...useForm, [e.target.name]: e.target.value });
+  }
+
+  function handleCreateCard() {
+    if (!form.phone.trim()) {
+      alert("请输入手机号");
       return;
     }
 
-    if (!form.therapist.trim()) {
-      alert("请输入技师姓名");
+    if (!form.salePrice) {
+      alert("请输入礼品卡销售金额");
       return;
     }
 
-    const savedBookings = JSON.parse(localStorage.getItem("bookings") || "[]");
+    const saved = JSON.parse(localStorage.getItem("giftcards") || "[]");
 
-    const startTime = new Date(form.time).getTime();
-    const duration = parseInt(form.duration, 10);
-    const endTime = startTime + duration * 60 * 1000;
+    const totalSessions = form.planType === "BUY6GET1" ? 7 : 11;
 
-    // 只检查技师冲突，房间先忽略
-    for (let item of savedBookings) {
-      if (!form.therapist || !item.therapist) continue;
-
-      const sameTherapist =
-        normalizeName(item.therapist) === normalizeName(form.therapist);
-
-      if (!sameTherapist) continue;
-
-      const existingStart = new Date(item.time).getTime();
-      const existingEnd =
-        existingStart + parseInt(item.duration, 10) * 60 * 1000;
-
-      const isOverlap =
-        startTime < existingEnd && endTime > existingStart;
-
-      if (isOverlap) {
-        alert("❌ 该技师这个时间已经有预约，不能重复");
-        return;
-      }
-    }
-
-    const newBooking = {
+    const newCard = {
       id: Date.now(),
-      time: form.time,
-      duration: form.duration,
-      room: form.room,
-      therapist: normalizeName(form.therapist),
+      cardNo: generateGiftCardNo(),
+      planType: form.planType,
+      customerName: form.customerName,
+      phone: form.phone,
+      salePrice: parseFloat(form.salePrice),
+      paymentMethod: form.paymentMethod,
+      totalSessions,
+      usedSessions: 0,
+      remainingSessions: totalSessions,
+      status: "active",
       note: form.note,
+      createdAt: new Date().toLocaleString(),
+      usageHistory: [],
     };
 
-    const updatedBookings = [...savedBookings, newBooking];
+    const updated = [...saved, newCard];
+    localStorage.setItem("giftcards", JSON.stringify(updated));
+    setGiftCards(updated);
 
-    localStorage.setItem("bookings", JSON.stringify(updatedBookings));
-    setBookings(updatedBookings);
-
-    alert("预约已保存 ✅");
+    alert("礼品卡已创建 ✅");
 
     setForm({
-      time: "",
-      duration: "30",
-      room: "single",
+      planType: "BUY6GET1",
+      customerName: "",
+      phone: "",
+      salePrice: "",
+      paymentMethod: "POS",
+      note: "",
+    });
+  }
+
+  function handleUseCard() {
+    if (!useForm.cardNo.trim()) {
+      alert("请输入礼品卡号");
+      return;
+    }
+
+    const saved = JSON.parse(localStorage.getItem("giftcards") || "[]");
+    const index = saved.findIndex(
+      (item) =>
+        (item.cardNo || "").trim().toLowerCase() ===
+        useForm.cardNo.trim().toLowerCase()
+    );
+
+    if (index === -1) {
+      alert("未找到该礼品卡");
+      return;
+    }
+
+    const card = saved[index];
+
+    if (card.status === "void") {
+      alert("该礼品卡已作废，不能使用");
+      return;
+    }
+
+    if (Number(card.remainingSessions || 0) <= 0) {
+      alert("该礼品卡次数不足，不能使用");
+      return;
+    }
+
+    const updatedCard = {
+      ...card,
+      usedSessions: Number(card.usedSessions || 0) + 1,
+      remainingSessions: Number(card.remainingSessions || 0) - 1,
+      status:
+        Number(card.remainingSessions || 0) - 1 <= 0 ? "used_up" : "active",
+      usageHistory: [
+        ...(card.usageHistory || []),
+        {
+          time: new Date().toLocaleString(),
+          therapist: useForm.therapist,
+          note: useForm.note,
+          source: "giftcards",
+        },
+      ],
+    };
+
+    saved[index] = updatedCard;
+    localStorage.setItem("giftcards", JSON.stringify(saved));
+    setGiftCards([...saved]);
+
+    alert("礼品卡核销成功 ✅");
+
+    setUseForm({
+      cardNo: "",
       therapist: "",
       note: "",
     });
   }
 
   function handleDelete(id) {
-    const updatedBookings = bookings.filter((item) => item.id !== id);
-    localStorage.setItem("bookings", JSON.stringify(updatedBookings));
-    setBookings(updatedBookings);
+    const updated = giftCards.filter((item) => item.id !== id);
+    localStorage.setItem("giftcards", JSON.stringify(updated));
+    setGiftCards(updated);
   }
+
+  function handleVoid(id) {
+    const updated = giftCards.map((item) =>
+      item.id === id ? { ...item, status: "void" } : item
+    );
+    localStorage.setItem("giftcards", JSON.stringify(updated));
+    setGiftCards(updated);
+  }
+
+  const totalSalesAmount = useMemo(() => {
+    return giftCards.reduce((sum, item) => sum + Number(item.salePrice || 0), 0);
+  }, [giftCards]);
 
   return (
     <div style={{ padding: 40, fontFamily: "Arial" }}>
-      <h1>预约系统</h1>
+      <h1>礼品卡系统</h1>
+
+      <h2>创建礼品卡</h2>
 
       <div style={{ marginBottom: 12 }}>
-        <label>时间：</label>
+        <label>类型：</label>
+        <select name="planType" value={form.planType} onChange={handleChange}>
+          <option value="BUY6GET1">买6送1</option>
+          <option value="BUY10GET1">买10送1</option>
+        </select>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label>客户姓名（可不填）：</label>
         <input
-          type="datetime-local"
-          name="time"
-          value={form.time}
+          name="customerName"
+          value={form.customerName}
           onChange={handleChange}
         />
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <label>时长：</label>
+        <label>手机号：</label>
+        <input name="phone" value={form.phone} onChange={handleChange} />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label>销售金额：</label>
+        <input
+          name="salePrice"
+          type="number"
+          value={form.salePrice}
+          onChange={handleChange}
+        />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label>支付方式：</label>
         <select
-          name="duration"
-          value={form.duration}
+          name="paymentMethod"
+          value={form.paymentMethod}
           onChange={handleChange}
         >
-          <option value="30">30分钟</option>
-          <option value="45">45分钟</option>
-          <option value="60">60分钟</option>
-          <option value="90">90分钟</option>
-          <option value="120">120分钟</option>
+          <option value="POS">POS</option>
+          <option value="Cash">现金</option>
         </select>
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <label>房间：</label>
-        <select name="room" value={form.room} onChange={handleChange}>
-          <option value="single">单人房</option>
-          <option value="couple">夫妻房</option>
-        </select>
+        <label>备注：</label>
+        <input name="note" value={form.note} onChange={handleChange} />
+      </div>
+
+      <button onClick={handleCreateCard}>创建礼品卡</button>
+
+      <hr style={{ margin: "30px 0" }} />
+
+      <h2>礼品卡手动核销</h2>
+
+      <div style={{ marginBottom: 12 }}>
+        <label>礼品卡号：</label>
+        <input
+          name="cardNo"
+          value={useForm.cardNo}
+          onChange={handleUseChange}
+        />
       </div>
 
       <div style={{ marginBottom: 12 }}>
         <label>技师：</label>
         <input
-          type="text"
           name="therapist"
-          value={form.therapist}
-          onChange={handleChange}
+          value={useForm.therapist}
+          onChange={handleUseChange}
         />
       </div>
 
       <div style={{ marginBottom: 12 }}>
         <label>备注：</label>
         <input
-          type="text"
           name="note"
-          value={form.note}
-          onChange={handleChange}
+          value={useForm.note}
+          onChange={handleUseChange}
         />
       </div>
 
-      <button onClick={handleSubmit}>保存预约</button>
+      <button onClick={handleUseCard}>核销1次</button>
 
       <hr style={{ margin: "30px 0" }} />
 
-      <h2>已保存预约</h2>
+      <h2>礼品卡列表</h2>
+      <h3>礼品卡销售总额：${totalSalesAmount.toFixed(2)}</h3>
 
-      {bookings.length === 0 ? (
-        <p>暂无预约</p>
+      {giftCards.length === 0 ? (
+        <p>暂无礼品卡</p>
       ) : (
-        <table border="1" cellPadding="8" style={{ borderCollapse: "collapse" }}>
+        <table
+          border="1"
+          cellPadding="8"
+          style={{ borderCollapse: "collapse", width: "100%" }}
+        >
           <thead>
             <tr>
-              <th>时间</th>
-              <th>时长</th>
-              <th>房间</th>
-              <th>技师</th>
-              <th>备注</th>
+              <th>卡号</th>
+              <th>类型</th>
+              <th>姓名</th>
+              <th>手机号</th>
+              <th>金额</th>
+              <th>支付方式</th>
+              <th>总次数</th>
+              <th>已用</th>
+              <th>剩余</th>
+              <th>状态</th>
+              <th>创建时间</th>
               <th>操作</th>
             </tr>
           </thead>
           <tbody>
-            {bookings.map((item) => (
+            {giftCards.map((item) => (
               <tr key={item.id}>
-                <td>{item.time}</td>
-                <td>{item.duration}分钟</td>
-                <td>{item.room === "single" ? "单人房" : "夫妻房"}</td>
-                <td>{item.therapist || "-"}</td>
-                <td>{item.note || "-"}</td>
+                <td>{item.cardNo}</td>
+                <td>{item.planType === "BUY6GET1" ? "买6送1" : "买10送1"}</td>
+                <td>{item.customerName || "-"}</td>
+                <td>{item.phone}</td>
+                <td>${Number(item.salePrice).toFixed(2)}</td>
+                <td>{item.paymentMethod}</td>
+                <td>{item.totalSessions}</td>
+                <td>{item.usedSessions}</td>
+                <td>{item.remainingSessions}</td>
+                <td>{item.status}</td>
+                <td>{item.createdAt}</td>
                 <td>
+                  <button
+                    onClick={() => handleVoid(item.id)}
+                    style={{ marginRight: 8 }}
+                  >
+                    作废
+                  </button>
                   <button onClick={() => handleDelete(item.id)}>删除</button>
                 </td>
               </tr>
