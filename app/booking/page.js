@@ -1,25 +1,17 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 
-function normalizeName(name) {
-  return (name || "").trim().toLowerCase();
+function normalizeCode(text) {
+  return (text || "").trim().toUpperCase();
 }
 
-function formatDisplayName(name) {
-  const normalized = normalizeName(name);
-  if (!normalized) return "";
-  return normalized
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function parseTherapists(text) {
-  return (text || "")
-    .split(/[,，/&+、]+/)
-    .map((item) => normalizeName(item))
-    .filter(Boolean);
+function collectEmployeeCodes(item) {
+  return [
+    normalizeCode(item.employee1),
+    normalizeCode(item.employee2),
+    normalizeCode(item.employee3),
+    normalizeCode(item.employee4),
+  ].filter(Boolean);
 }
 
 function formatBookingTime(value) {
@@ -45,15 +37,19 @@ function isSameOrAfterToday(value) {
 
 function getWeekStart(date) {
   const d = new Date(date);
-  const day = d.getDay(); // 0 Sunday, 1 Monday
-  const diff = day === 0 ? -6 : 1 - day; // make Monday start
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
   return d;
 }
 
-function getWeekLabels() {
-  return ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+function isSameDay(a, b) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
 }
 
 export default function BookingPage() {
@@ -61,9 +57,14 @@ export default function BookingPage() {
     time: "",
     duration: "30",
     partySize: "1",
-    therapists: "",
+    employee1: "",
+    employee2: "",
+    employee3: "",
+    employee4: "",
     source: "phone",
     isMember: false,
+    customerName: "",
+    customerPhone: "",
     note: "",
   });
 
@@ -73,7 +74,6 @@ export default function BookingPage() {
   useEffect(() => {
     const savedBookings = JSON.parse(localStorage.getItem("bookings") || "[]");
 
-    // 自动清掉今天之前的预约
     const cleanedBookings = savedBookings.filter((item) =>
       isSameOrAfterToday(item.time)
     );
@@ -89,7 +89,12 @@ export default function BookingPage() {
     const { name, value, type, checked } = e.target;
     setForm({
       ...form,
-      [name]: type === "checkbox" ? checked : value,
+      [name]:
+        type === "checkbox"
+          ? checked
+          : name.startsWith("employee")
+          ? normalizeCode(value)
+          : value,
     });
   }
 
@@ -98,9 +103,14 @@ export default function BookingPage() {
       time: "",
       duration: "30",
       partySize: "1",
-      therapists: "",
+      employee1: "",
+      employee2: "",
+      employee3: "",
+      employee4: "",
       source: "phone",
       isMember: false,
+      customerName: "",
+      customerPhone: "",
       note: "",
     });
     setEditingId(null);
@@ -112,15 +122,16 @@ export default function BookingPage() {
       return;
     }
 
-    if (!form.therapists.trim()) {
-      alert("请输入技师姓名");
+    const currentEmployeeCodes = collectEmployeeCodes(form);
+
+    if (currentEmployeeCodes.length === 0) {
+      alert("请至少输入1个员工编号");
       return;
     }
 
-    const therapistList = parseTherapists(form.therapists);
-
-    if (therapistList.length === 0) {
-      alert("请输入有效的技师姓名");
+    const uniqueCodes = new Set(currentEmployeeCodes);
+    if (uniqueCodes.size !== currentEmployeeCodes.length) {
+      alert("员工编号不能重复");
       return;
     }
 
@@ -134,13 +145,13 @@ export default function BookingPage() {
       if (editingId && item.id === editingId) continue;
       if (item.status === "cancelled") continue;
 
-      const existingTherapists = parseTherapists(item.therapists);
+      const existingEmployeeCodes = collectEmployeeCodes(item);
 
-      const hasSameTherapist = therapistList.some((currentName) =>
-        existingTherapists.includes(currentName)
+      const hasSameEmployee = currentEmployeeCodes.some((currentCode) =>
+        existingEmployeeCodes.includes(currentCode)
       );
 
-      if (!hasSameTherapist) continue;
+      if (!hasSameEmployee) continue;
 
       const existingStart = new Date(item.time).getTime();
       const existingEnd =
@@ -149,7 +160,7 @@ export default function BookingPage() {
       const isOverlap = startTime < existingEnd && endTime > existingStart;
 
       if (isOverlap) {
-        alert("❌ 该技师在这个时间段已经有预约，不能重复");
+        alert("❌ 该员工编号在这个时间段已经有预约，不能重复");
         return;
       }
     }
@@ -161,9 +172,14 @@ export default function BookingPage() {
       time: form.time,
       duration: form.duration,
       partySize: form.partySize,
-      therapists: form.therapists,
+      employee1: normalizeCode(form.employee1),
+      employee2: normalizeCode(form.employee2),
+      employee3: normalizeCode(form.employee3),
+      employee4: normalizeCode(form.employee4),
       source: form.source,
       isMember: form.isMember,
+      customerName: form.customerName,
+      customerPhone: form.customerPhone,
       note: form.note,
       status: editingId
         ? existingBooking?.status || "booked"
@@ -185,7 +201,6 @@ export default function BookingPage() {
       alert("预约已保存 ✅");
     }
 
-    // 再次清理今天之前的数据
     const finalBookings = updatedBookings.filter((item) =>
       isSameOrAfterToday(item.time)
     );
@@ -213,9 +228,14 @@ export default function BookingPage() {
       time: booking.time || "",
       duration: booking.duration || "30",
       partySize: booking.partySize || "1",
-      therapists: booking.therapists || "",
+      employee1: booking.employee1 || "",
+      employee2: booking.employee2 || "",
+      employee3: booking.employee3 || "",
+      employee4: booking.employee4 || "",
       source: booking.source || "phone",
       isMember: Boolean(booking.isMember),
+      customerName: booking.customerName || "",
+      customerPhone: booking.customerPhone || "",
       note: booking.note || "",
     });
 
@@ -241,53 +261,55 @@ export default function BookingPage() {
       .sort((a, b) => new Date(a.time) - new Date(b.time));
   }, [bookings]);
 
-  const weeklyStats = useMemo(() => {
-    const labels = getWeekLabels();
-    const counts = [0, 0, 0, 0, 0, 0, 0];
-
-    const now = new Date();
-    const weekStart = getWeekStart(now);
+  const employeeStats = useMemo(() => {
+    const today = new Date();
+    const weekStart = getWeekStart(today);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
 
-    visibleBookings.forEach((item) => {
-      if (item.status === "cancelled") return;
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
 
-      const date = new Date(item.time);
-      if (Number.isNaN(date.getTime())) return;
-
-      if (date >= weekStart && date < weekEnd) {
-        const day = date.getDay(); // 0 Sunday
-        const index = day === 0 ? 6 : day - 1; // Monday=0
-        counts[index] += 1;
-      }
-    });
-
-    return labels.map((label, index) => ({
-      label,
-      count: counts[index],
-    }));
-  }, [visibleBookings]);
-
-  const monthlyStats = useMemo(() => {
-    const counts = Array(12).fill(0);
-    const currentYear = new Date().getFullYear();
+    const statsMap = {};
 
     visibleBookings.forEach((item) => {
       if (item.status === "cancelled") return;
 
-      const date = new Date(item.time);
-      if (Number.isNaN(date.getTime())) return;
+      const bookingDate = new Date(item.time);
+      if (Number.isNaN(bookingDate.getTime())) return;
 
-      if (date.getFullYear() === currentYear) {
-        counts[date.getMonth()] += 1;
-      }
+      const codes = collectEmployeeCodes(item);
+
+      codes.forEach((code) => {
+        if (!statsMap[code]) {
+          statsMap[code] = {
+            employeeCode: code,
+            dayCount: 0,
+            weekCount: 0,
+            monthCount: 0,
+          };
+        }
+
+        if (isSameDay(bookingDate, today)) {
+          statsMap[code].dayCount += 1;
+        }
+
+        if (bookingDate >= weekStart && bookingDate < weekEnd) {
+          statsMap[code].weekCount += 1;
+        }
+
+        if (
+          bookingDate.getFullYear() === currentYear &&
+          bookingDate.getMonth() === currentMonth
+        ) {
+          statsMap[code].monthCount += 1;
+        }
+      });
     });
 
-    return counts.map((count, index) => ({
-      label: `${index + 1}月`,
-      count,
-    }));
+    return Object.values(statsMap).sort((a, b) =>
+      a.employeeCode.localeCompare(b.employeeCode)
+    );
   }, [visibleBookings]);
 
   return (
@@ -334,18 +356,51 @@ export default function BookingPage() {
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <label>技师：</label>
+        <label>员工编号1：</label>
         <input
           type="text"
-          name="therapists"
-          value={form.therapists}
+          name="employee1"
+          value={form.employee1}
           onChange={handleChange}
-          placeholder="例如：Amy 或 Amy, Lily"
-          style={{ width: 300 }}
+          placeholder="例如 A01"
+          style={{ width: 200 }}
         />
-        <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-          多位技师请用逗号分开，例如：Amy, Lily
-        </div>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label>员工编号2：</label>
+        <input
+          type="text"
+          name="employee2"
+          value={form.employee2}
+          onChange={handleChange}
+          placeholder="例如 A03"
+          style={{ width: 200 }}
+        />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label>员工编号3：</label>
+        <input
+          type="text"
+          name="employee3"
+          value={form.employee3}
+          onChange={handleChange}
+          placeholder="例如 A05"
+          style={{ width: 200 }}
+        />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label>员工编号4：</label>
+        <input
+          type="text"
+          name="employee4"
+          value={form.employee4}
+          onChange={handleChange}
+          placeholder="例如 A08"
+          style={{ width: 200 }}
+        />
       </div>
 
       <div style={{ marginBottom: 12 }}>
@@ -371,6 +426,28 @@ export default function BookingPage() {
           />
           是否会员
         </label>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label>客户姓名（可不填）：</label>
+        <input
+          type="text"
+          name="customerName"
+          value={form.customerName}
+          onChange={handleChange}
+          style={{ width: 300 }}
+        />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label>客户电话（可不填）：</label>
+        <input
+          type="text"
+          name="customerPhone"
+          value={form.customerPhone}
+          onChange={handleChange}
+          style={{ width: 300 }}
+        />
       </div>
 
       <div style={{ marginBottom: 12 }}>
@@ -403,9 +480,11 @@ export default function BookingPage() {
               <th>时间</th>
               <th>时长</th>
               <th>人数</th>
-              <th>技师</th>
+              <th>员工编号</th>
               <th>预约方式</th>
               <th>会员</th>
+              <th>客户姓名</th>
+              <th>客户电话</th>
               <th>状态</th>
               <th>备注</th>
               <th>操作</th>
@@ -417,11 +496,7 @@ export default function BookingPage() {
                 <td>{formatBookingTime(item.time)}</td>
                 <td>{item.duration}分钟</td>
                 <td>{item.partySize}人</td>
-                <td>
-                  {parseTherapists(item.therapists)
-                    .map((name) => formatDisplayName(name))
-                    .join(", ")}
-                </td>
+                <td>{collectEmployeeCodes(item).join(", ")}</td>
                 <td>
                   {item.source === "website"
                     ? "网络"
@@ -430,6 +505,8 @@ export default function BookingPage() {
                     : "Walk-in"}
                 </td>
                 <td>{item.isMember ? "是" : "否"}</td>
+                <td>{item.customerName || "-"}</td>
+                <td>{item.customerPhone || "-"}</td>
                 <td>
                   {item.status === "booked"
                     ? "已预约"
@@ -477,43 +554,32 @@ export default function BookingPage() {
 
       <hr style={{ margin: "30px 0" }} />
 
-      <h2>本周预约统计（周一到周日）</h2>
-      <table border="1" cellPadding="8" style={{ borderCollapse: "collapse", width: "100%" }}>
-        <thead>
-          <tr>
-            {weeklyStats.map((item) => (
-              <th key={item.label}>{item.label}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            {weeklyStats.map((item) => (
-              <td key={item.label}>{item.count}</td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
+      <h2>员工预约统计（今日 / 本周 / 本月）</h2>
 
-      <hr style={{ margin: "30px 0" }} />
-
-      <h2>本年每月预约统计</h2>
-      <table border="1" cellPadding="8" style={{ borderCollapse: "collapse", width: "100%" }}>
-        <thead>
-          <tr>
-            {monthlyStats.map((item) => (
-              <th key={item.label}>{item.label}</th>
+      {employeeStats.length === 0 ? (
+        <p>暂无统计数据</p>
+      ) : (
+        <table border="1" cellPadding="8" style={{ borderCollapse: "collapse", width: "100%" }}>
+          <thead>
+            <tr>
+              <th>员工编号</th>
+              <th>今日预约数</th>
+              <th>本周预约数</th>
+              <th>本月预约数</th>
+            </tr>
+          </thead>
+          <tbody>
+            {employeeStats.map((item) => (
+              <tr key={item.employeeCode}>
+                <td>{item.employeeCode}</td>
+                <td>{item.dayCount}</td>
+                <td>{item.weekCount}</td>
+                <td>{item.monthCount}</td>
+              </tr>
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            {monthlyStats.map((item) => (
-              <td key={item.label}>{item.count}</td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      )}
 
       <div style={{ marginTop: 20 }}>
         <a href="/">返回首页</a>
